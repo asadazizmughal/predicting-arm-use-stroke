@@ -367,4 +367,15 @@ cat("Mann-Whitney test by Paresis: W =", test_paresis$statistic,
 
 par(mfrow = c(1, 1))
 ```
+# Simple Linear Regression
 
+As a final check, we fit a multiple linear regression in R using all significant predictors. This complements the Python ML models by showing the basic linear relationships. Note: this model ignores multicollinearity — for that we rely on Ridge/Lasso in Python.
+
+```{r linear-regression}
+# Fit a standard linear regression
+lm_model <- lm(funcUseRatio ~ FMUE_TOTAL + WMFT_Total + BBT_P + Barthel + PANU + Age,
+               data = heatmap_df)
+
+# Model summary
+summary(lm_model)
+```
