@@ -336,4 +336,35 @@ legend("topright", legend = "C1P01 (outlier)",
        col = "red", pch = 16)
 ```
 
+# Group Comparisons
+
+We test whether funcUseRatio differs by Sex or Paresis side using the **Mann-Whitney U test** — the non-parametric equivalent of a t-test (doesn't assume normality).
+
+```{r group-comparisons, fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+
+# By Sex
+boxplot(funcUseRatio ~ Sex,
+        data = merged_df,
+        col = c("coral", "steelblue"),
+        main = "funcUseRatio by Sex",
+        ylab = "funcUseRatio")
+
+test_sex <- wilcox.test(funcUseRatio ~ Sex, data = merged_df)
+cat("Mann-Whitney test by Sex:     W =", test_sex$statistic,
+    ", p =", round(test_sex$p.value, 3), "\n")
+
+# By Paresis side
+boxplot(funcUseRatio ~ Paresis,
+        data = merged_df,
+        col = c("steelblue", "coral"),
+        main = "funcUseRatio by Paresis Side",
+        ylab = "funcUseRatio")
+
+test_paresis <- wilcox.test(funcUseRatio ~ Paresis, data = merged_df)
+cat("Mann-Whitney test by Paresis: W =", test_paresis$statistic,
+    ", p =", round(test_paresis$p.value, 3), "\n")
+
+par(mfrow = c(1, 1))
+```
 
