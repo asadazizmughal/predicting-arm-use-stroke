@@ -55,3 +55,38 @@ merged_df <- read_csv("data/merged_dataset.csv")
 cat("Dataset:", nrow(merged_df), "patients,", ncol(merged_df), "columns\n")
 cat("Columns:", paste(names(merged_df), collapse = ", "), "\n")
 ```
+
+# Descriptive Statistics
+
+We compute the basic summary statistics (mean, standard deviation, median, min, max) for each continuous variable. These give us a first sense of the data: central tendency, spread, and range.
+
+```{r descriptive-stats}
+# List the continuous variables we want to summarize
+continuous_vars <- c("Age", "PANU", "Barthel", "FMUE_TOTAL",
+                     "WMFT_Total", "BBT_P", "funcUseRatio")
+
+# Build the summary table row by row
+summary_stats <- data.frame(
+  Variable = continuous_vars,
+  N        = sapply(continuous_vars, function(v) sum(!is.na(merged_df[[v]]))),
+  Mean     = sapply(continuous_vars, function(v) round(mean(merged_df[[v]], na.rm = TRUE), 2)),
+  SD       = sapply(continuous_vars, function(v) round(sd(merged_df[[v]], na.rm = TRUE), 2)),
+  Median   = sapply(continuous_vars, function(v) round(median(merged_df[[v]], na.rm = TRUE), 2)),
+  Min      = sapply(continuous_vars, function(v) min(merged_df[[v]], na.rm = TRUE)),
+  Max      = sapply(continuous_vars, function(v) max(merged_df[[v]], na.rm = TRUE))
+)
+
+# Display as a formatted HTML table
+kable(summary_stats, caption = "Descriptive statistics of continuous variables")
+```
+
+## Categorical Variables
+
+For categorical variables (Sex, Paresis side), we just report counts.
+```{r categorical-stats}
+cat("Sex distribution:\n")
+print(table(merged_df$Sex))
+
+cat("\nParesis side distribution:\n")
+print(table(merged_df$Paresis))
+```
