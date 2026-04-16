@@ -206,3 +206,72 @@ cat("Median:", round(median(merged_df$funcUseRatio), 3), "\n")
 cat("Since mean > median and p < 0.05 -> right-skewed, not normal.\n")
 cat("Decision: use Spearman correlations (non-parametric).\n")
 ```
+
+# Spearman Correlation Analysis
+
+Since funcUseRatio is not normally distributed, we use **Spearman** correlations. Spearman is rank-based, so it does not assume normality and is robust to outliers.
+
+## Correlations with funcUseRatio
+
+```{r spearman-correlations}
+# Clinical variables to test against funcUseRatio
+clinical_vars <- c("PANU", "FMUE_TOTAL", "WMFT_Total", "BBT_P", "Barthel", "Age")
+
+correlation_results <- data.frame(
+  Variable     = clinical_vars,
+  rho          = NA,
+  p_value      = NA,
+  Significance = NA
+)
+
+for (i in seq_along(clinical_vars)) {
+  variable_name <- clinical_vars[i]
+  
+  # Keep only rows where both variables are present
+  valid_rows <- complete.cases(merged_df[[variable_name]], merged_df$funcUseRatio)
+  
+  test_result <- cor.test(merged_df[[variable_name]][valid_rows],
+                          merged_df$funcUseRatio[valid_rows],
+                          method = "spearman")
+  
+  correlation_results$rho[i]     <- round(test_result$estimate, 3)
+  correlation_results$p_value[i] <- round(test_result$p.value, 4)
+  correlation_results$Significance[i] <- ifelse(test_result$p.value < 0.001, "***",
+                                         ifelse(test_result$p.value < 0.01,  "**",
+                                         ifelse(test_result$p.value < 0.05,  "*", "ns")))
+}
+
+kable(correlation_results,
+      caption = "Spearman correlations with funcUseRatio (*** p<0.001, ** p<0.01, * p<0.05)")
+```
+
+## Correlation Heatmap
+
+A visual representation of all pairwise correlations between variables. Red = positive, blue = negative, intensity = magnitude.
+
+```{r correlation-heatmap, fig.width=9, fig.height=8}
+# Impute missing values globally for the heatmap display
+# (imputation for modeling is done inside LOOCV folds in Python)
+heatmap_df <- merged_df
+heatmap_df$PANU[is.na(heatmap_df$PANU)] <- median(heatmap_df$PANU, na.rm = TRUE)
+heatmap_df$Barthel[is.na(heatmap_df$Barthel)] <- median(heatmap_df$Barthel, na.rm = TRUE)
+
+# Variables to include in the matrix
+heatmap_vars <- c("PANU", "FMUE_TOTAL", "WMFT_Total", "BBT_P",
+                  "Barthel", "Age", "funcUseRatio")
+
+# Compute Spearman correlation matrix
+correlation_matrix <- cor(heatmap_df[, heatmap_vars], method = "spearman")
+
+# Draw the heatmap
+corrplot(correlation_matrix,
+         method = "color",
+         type = "lower",              # show only lower triangle (upper is redundant)
+         addCoef.col = "black",       # print the correlation value inside each cell
+         tl.col = "black",            # axis text color
+         tl.srt = 45,                 # rotate axis text 45 degrees
+         number.cex = 0.8,            # size of numbers inside cells
+         col = colorRampPalette(c("#2166AC", "white", "#B2182B"))(100),
+         title = "Spearman Correlation Matrix",
+         mar = c(0, 0, 2, 0))
+```
