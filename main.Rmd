@@ -90,3 +90,119 @@ print(table(merged_df$Sex))
 cat("\nParesis side distribution:\n")
 print(table(merged_df$Paresis))
 ```
+# Normality Tests (Shapiro-Wilk)
+
+To decide between **Pearson** (parametric) and **Spearman** (non-parametric) correlations, we test each variable for normality.
+
+**Shapiro-Wilk test rule:**
+
+- p ≥ 0.05 → data is approximately normal → Pearson OK
+- p < 0.05 → data is NOT normal → use Spearman
+
+With a small sample (n = 30), Shapiro-Wilk is the recommended normality test.
+
+```{r normality-tests}
+normality_results <- data.frame(
+  Variable = continuous_vars,
+  W_statistic = NA,
+  p_value = NA,
+  Normal = NA
+)
+
+for (i in seq_along(continuous_vars)) {
+  variable_name <- continuous_vars[i]
+  values <- merged_df[[variable_name]][!is.na(merged_df[[variable_name]])]
+  
+  test_result <- shapiro.test(values)
+  
+  normality_results$W_statistic[i] <- round(test_result$statistic, 4)
+  normality_results$p_value[i]     <- round(test_result$p.value, 4)
+  normality_results$Normal[i]      <- ifelse(test_result$p.value >= 0.05, "Yes", "No")
+}
+
+kable(normality_results, caption = "Shapiro-Wilk normality test (alpha = 0.05)")
+```
+
+## QQ Plots — Visual Normality Check
+
+A **QQ plot** shows the data quantiles against theoretical normal quantiles. If points align with the red diagonal line, the data is approximately normal. Deviations from the line indicate non-normality.
+
+```{r qq-plots, fig.width=14, fig.height=10}
+# Arrange 8 plots in a 2x4 grid
+par(mfrow = c(2, 4))
+
+for (variable_name in continuous_vars) {
+  values <- merged_df[[variable_name]][!is.na(merged_df[[variable_name]])]
+  
+  qqnorm(values, main = variable_name,
+         col = "steelblue", pch = 16)
+  qqline(values, col = "red", lwd = 2)
+}
+
+# Reset to default single plot layout
+par(mfrow = c(1, 1))
+```
+
+## Histograms — Distribution Shape
+
+Histograms show how the data is spread out. We add a red dashed line at the mean for reference.
+
+```{r histograms, fig.width=14, fig.height=8}
+par(mfrow = c(2, 4))
+
+for (variable_name in continuous_vars) {
+  values <- merged_df[[variable_name]][!is.na(merged_df[[variable_name]])]
+  
+  hist(values,
+       main = variable_name,
+       xlab = variable_name,
+       col = "steelblue",
+       border = "black",
+       breaks = 12)
+  
+  abline(v = mean(values), col = "red", lwd = 2, lty = 2)
+}
+
+par(mfrow = c(1, 1))
+```
+
+## Detailed Look at funcUseRatio
+
+Since funcUseRatio is our target variable, we show it in detail with a histogram and a box plot side by side.
+
+```{r target-detail, fig.width=12, fig.height=5}
+par(mfrow = c(1, 2))
+
+# Histogram with mean and median
+hist(merged_df$funcUseRatio,
+     breaks = 15,
+     col = "steelblue",
+     border = "black",
+     main = "Distribution of funcUseRatio",
+     xlab = "funcUseRatio")
+
+abline(v = mean(merged_df$funcUseRatio), col = "red",    lwd = 2, lty = 2)
+abline(v = median(merged_df$funcUseRatio), col = "orange", lwd = 2, lty = 2)
+
+legend("topright",
+       legend = c(paste("Mean =", round(mean(merged_df$funcUseRatio), 2)),
+                  paste("Median =", round(median(merged_df$funcUseRatio), 2))),
+       col = c("red", "orange"),
+       lty = 2, lwd = 2, cex = 0.9)
+
+# Box plot
+boxplot(merged_df$funcUseRatio,
+        main = "Box plot of funcUseRatio",
+        ylab = "funcUseRatio",
+        col = "steelblue")
+
+par(mfrow = c(1, 1))
+
+# Key observation
+shapiro_p <- shapiro.test(merged_df$funcUseRatio)$p.value
+cat("Shapiro-Wilk p-value:", round(shapiro_p, 4), "\n")
+cat("Mean:", round(mean(merged_df$funcUseRatio), 3), "\n")
+cat("Median:", round(median(merged_df$funcUseRatio), 3), "\n")
+cat("Since mean > median and p < 0.05 -> right-skewed, not normal.\n")
+cat("Decision: use Spearman correlations (non-parametric).\n")
+```
