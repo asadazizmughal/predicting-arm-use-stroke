@@ -1,0 +1,4 @@
+Model,MAE,RMSE,CV_R2
+Lasso (alpha=0.01),0.1619,0.218,-0.0474
+Ridge (alpha=1.0),0.1718,0.2261,-0.1266
+Linear Regression,0.182,0.2328,-0.1936
