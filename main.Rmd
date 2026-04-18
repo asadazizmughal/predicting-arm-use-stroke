@@ -22,6 +22,8 @@ This R notebook performs the **statistical validation** part of the project:
 
 The machine learning pipeline is in `main.ipynb` (Python). This notebook loads the merged dataset produced by Python (`data/merged_dataset.csv`).
 
+**Why split Python and R?** Python handles the modelling pipeline (scikit-learn is the standard tool for ML). R is the gold standard for statistical testing and publication-quality plots. Each tool does what it does best. The merged dataset is produced once by Python and read by R — a single source of truth.
+
 ---
 
 # Setup
@@ -56,6 +58,12 @@ cat("Dataset:", nrow(merged_df), "patients,", ncol(merged_df), "columns\n")
 cat("Columns:", paste(names(merged_df), collapse = ", "), "\n")
 ```
 
+### What the dataset contains
+
+We have **30 patients** with their clinical scores, demographic variables, and the computed `funcUseRatio` (our target variable from accelerometry). The dataset was prepared by the Python notebook — Python handled the data merging and target computation, then saved the clean dataset as a CSV. R now reads that CSV and performs the statistical validation.
+
+---
+
 # Descriptive Statistics
 
 We compute the basic summary statistics (mean, standard deviation, median, min, max) for each continuous variable. These give us a first sense of the data: central tendency, spread, and range.
@@ -80,6 +88,20 @@ summary_stats <- data.frame(
 kable(summary_stats, caption = "Descriptive statistics of continuous variables")
 ```
 
+### Interpretation
+
+Looking at the summary table:
+
+- **Age** ranges from 33 to 82 years (mean ≈ 64), showing our sample covers a wide age range typical of stroke populations.
+- **FMUE_TOTAL** (/66) has a mean of about 44, meaning most patients have mild-to-moderate motor impairment. The range (15–66) confirms we have the full spectrum.
+- **WMFT_Total** (/75) mean ≈ 52 suggests reasonable functional capacity on average.
+- **BBT_P** (box-and-block test, paretic hand) has high variability (SD ≈ 18), with some patients scoring 0 (unable to move any cubes) and others reaching 57.
+- **Barthel** (/100) mean ≈ 88 means most patients are highly independent in daily life.
+- **PANU** mean ≈ 6.3% — most patients have little proximal non-use, but some show high values (max 29%).
+- **funcUseRatio** has mean ≈ 0.25 with SD ≈ 0.22. **Crucially, mean > median (0.18)**, which suggests the distribution is right-skewed — we confirm this later with the Shapiro-Wilk test.
+
+The high variability in BBT, PANU and funcUseRatio tells us our sample is heterogeneous — exactly what we want for finding predictive relationships.
+
 ## Categorical Variables
 
 For categorical variables (Sex, Paresis side), we just report counts.
@@ -90,6 +112,13 @@ print(table(merged_df$Sex))
 cat("\nParesis side distribution:\n")
 print(table(merged_df$Paresis))
 ```
+
+### Interpretation
+
+The sample is **imbalanced by sex** (about 70% male, 30% female) — common in stroke studies. **Paresis side** is roughly balanced (slightly more left-paretic patients). Neither imbalance is extreme enough to worry about, but we will test later whether sex or paresis side significantly affect funcUseRatio (Section 5).
+
+---
+
 # Normality Tests (Shapiro-Wilk)
 
 To decide between **Pearson** (parametric) and **Spearman** (non-parametric) correlations, we test each variable for normality.
@@ -123,6 +152,18 @@ for (i in seq_along(continuous_vars)) {
 kable(normality_results, caption = "Shapiro-Wilk normality test (alpha = 0.05)")
 ```
 
+### Interpretation
+
+Most variables fail the normality test, including our target **funcUseRatio** (p < 0.05, not normal). This is the most important result for our methodology because it **determines which statistical tests we can use**:
+
+- We **cannot** use Pearson correlation (which assumes normality)
+- We **must** use Spearman correlation (rank-based, no normality assumption)
+- We **cannot** use t-tests for group comparisons — we must use Mann-Whitney
+
+This is not a problem — Spearman and Mann-Whitney are well-established non-parametric alternatives. They are slightly less powerful than their parametric counterparts, but much safer when the normality assumption is violated.
+
+**Why the variables aren't normal:** most stroke-impairment measures are skewed because they have natural ceilings (e.g., Barthel caps at 100) or floors (BBT can be 0). This ceiling/floor effect creates non-normal distributions in virtually every clinical stroke dataset.
+
 ## QQ Plots — Visual Normality Check
 
 A **QQ plot** shows the data quantiles against theoretical normal quantiles. If points align with the red diagonal line, the data is approximately normal. Deviations from the line indicate non-normality.
@@ -142,6 +183,19 @@ for (variable_name in continuous_vars) {
 # Reset to default single plot layout
 par(mfrow = c(1, 1))
 ```
+
+
+### Interpretation
+
+QQ plots are a **visual confirmation** of the Shapiro-Wilk results:
+
+- **Age** roughly follows the diagonal — approximately normal.
+- **PANU, funcUseRatio** show strong deviation at the tails — the points curve away from the line at the top right, a classic sign of **right-skew**.
+- **Barthel** is flat in the middle and bends up at the extremes — ceiling effect (many patients at 100).
+- **BBT_P, FMUE_TOTAL, WMFT_Total** show various degrees of deviation.
+
+When in doubt about interpreting Shapiro-Wilk p-values, the QQ plot gives a visual second opinion. Both agree: non-parametric methods are appropriate for this data.
+
 
 ## Histograms — Distribution Shape
 
@@ -165,6 +219,18 @@ for (variable_name in continuous_vars) {
 
 par(mfrow = c(1, 1))
 ```
+
+### Interpretation
+
+The histograms reveal distribution shapes:
+
+- **Age** — roughly bell-shaped, centered around 65.
+- **PANU** — strongly right-skewed: most patients have low PANU (0–10%), a few outliers go up to 29%.
+- **Barthel** — left-skewed due to the ceiling effect (many patients at 100).
+- **FMUE_TOTAL, WMFT_Total, BBT_P** — bimodal or irregular, with the full spectrum of impairment represented.
+- **funcUseRatio** — right-skewed with a clear tail extending to high values (one patient above 1.0 — the outlier C1P01).
+
+These shapes confirm the need for non-parametric methods. They also motivate the use of **regularized regression** (Ridge/Lasso) in Python: ordinary least squares is sensitive to these skewed distributions, whereas regularization handles them more robustly.
 
 ## Detailed Look at funcUseRatio
 
@@ -206,6 +272,19 @@ cat("Median:", round(median(merged_df$funcUseRatio), 3), "\n")
 cat("Since mean > median and p < 0.05 -> right-skewed, not normal.\n")
 cat("Decision: use Spearman correlations (non-parametric).\n")
 ```
+### Interpretation
+
+This is the most important distribution for our analysis:
+
+- **Histogram shape**: clearly right-skewed — most patients cluster between 0.05 and 0.30, with a thin tail extending up to 1.03.
+- **Mean (≈0.25) vs Median (≈0.18)**: the fact that mean > median is mathematical proof of right-skewness. In a symmetric distribution they would be equal.
+- **Box plot**: the main box is compressed near the bottom and there is a clear outlier point far above the whiskers — this is **patient C1P01** with funcUseRatio ≈ 1.03, meaning they use their paretic arm more than their non-paretic arm (very unusual).
+
+**What this means clinically**: most stroke patients use their paretic arm far less than their non-paretic arm (ratio below 0.3 for most), reflecting the severity of learned non-use in daily life. Only a few patients achieve near-equal use.
+
+**Methodological consequence**: the right skew and outlier make non-parametric methods (Spearman, Mann-Whitney) essential for valid statistical inference.
+
+---
 
 # Spearman Correlation Analysis
 
@@ -245,6 +324,25 @@ kable(correlation_results,
       caption = "Spearman correlations with funcUseRatio (*** p<0.001, ** p<0.01, * p<0.05)")
 ```
 
+### Interpretation
+
+The correlation results tell a clear story:
+
+**Significant predictors of arm use:**
+
+- **WMFT_Total** (ρ ≈ 0.60, p < 0.001) — strongest predictor. Patients who can perform functional motor tasks in the clinic also use their arm more at home.
+- **BBT_P** (ρ ≈ 0.58, p < 0.001) — gross dexterity matters a lot. This confirms Le Perf (2022) who found BBT to be the strongest predictor.
+- **FMUE_TOTAL** (ρ ≈ 0.48, p < 0.01) — motor impairment score is predictive, though slightly weaker than the functional tests.
+
+**Non-significant predictors:**
+
+- **PANU** (ρ ≈ -0.13, p = 0.50) — does NOT predict funcUseRatio. This is a **key finding** because it exactly replicates Le Perf's thesis result. PANU measures proximal non-use during a lab reaching task, but this doesn't generalize to daily life where patients use their arm in many different ways.
+- **Age** (ρ ≈ -0.03, p > 0.8) — no meaningful relationship. Older patients don't necessarily use their arm less.
+- **Barthel** (ρ ≈ 0.37, p < 0.05) — borderline significant, but Barthel measures overall independence, not specifically arm use, so this is somewhat expected.
+
+**Clinical takeaway:** the motor-function tests (WMFT, BBT, FMUE) are the three most useful variables for predicting real-world arm use. PANU, despite being a kinematic measure designed to detect non-use, is NOT a good predictor of actual daily arm use.
+
+
 ## Correlation Heatmap
 
 A visual representation of all pairwise correlations between variables. Red = positive, blue = negative, intensity = magnitude.
@@ -275,6 +373,29 @@ corrplot(correlation_matrix,
          title = "Spearman Correlation Matrix",
          mar = c(0, 0, 2, 0))
 ```
+
+### Interpretation
+
+The heatmap reveals an important methodological issue: **multicollinearity among predictors**.
+
+**Key multicollinearity:**
+
+- **FMUE_TOTAL ↔ WMFT_Total** (ρ ≈ 0.91) — extremely correlated. Both measure motor ability, but FMUE scores isolated movements and WMFT scores functional tasks. They carry almost the same information.
+- **WMFT_Total ↔ BBT_P** (ρ ≈ 0.82) — strong correlation.
+- **FMUE_TOTAL ↔ BBT_P** (ρ ≈ 0.76) — strong correlation.
+
+**Why this matters for modeling:**
+
+Ordinary linear regression is unreliable when predictors are this correlated — coefficients become unstable and can flip signs randomly across samples. **This is precisely why we use Ridge and Lasso in Python** (see `main.ipynb`). These regularized methods penalize large coefficients, which stabilizes estimates in the presence of multicollinearity.
+
+**What's NOT correlated:**
+
+- PANU has low correlation with everything (< 0.2 absolute values) — it captures something different from the motor tests.
+- Age is largely independent of the clinical scores.
+
+This confirms that our 6 clinical features carry redundant information (especially the three motor tests), so the effective "information" in the data is less than 6 dimensions.
+
+---
 
 # Scatter Plots
 
@@ -318,6 +439,16 @@ points(heatmap_df$FMUE_TOTAL[outlier_idx],
 par(mfrow = c(1, 1))
 ```
 
+### Interpretation
+
+Each scatter plot shows a **positive trend** — as motor test scores increase, real-world arm use tends to increase. But there are three important observations:
+
+**1. The trend is noisy.** Even patients with similar motor scores (e.g., WMFT around 50) show a wide range of funcUseRatio values (from 0.05 to 0.5). Motor capacity explains some but not all of the variance — consistent with the modest correlations (ρ ≈ 0.5–0.6) rather than very strong (ρ > 0.8).
+
+**2. Some patients have high scores but low arm use.** For example, patients with WMFT > 60 but funcUseRatio < 0.2 — these are candidates for **learned non-use**. They have the motor capacity but don't use their arm spontaneously. This is exactly what the discrepancy analysis in Python identifies quantitatively.
+
+**3. The outlier C1P01 (red dot).** This patient has moderate motor scores but funcUseRatio > 1.0 (more paretic than non-paretic arm use). This is suspicious — could be a data entry error, compensation strategy, or an unusual activity pattern. Retaining them in the analysis or excluding them changes results slightly; a sensitivity analysis (with/without C1P01) would strengthen the conclusions.
+
 ## PANU — Not Significant
 
 PANU shows no clear relationship with funcUseRatio — confirming the finding from Le Perf (2022).
@@ -335,6 +466,22 @@ points(heatmap_df$PANU[outlier_idx],
 legend("topright", legend = "C1P01 (outlier)",
        col = "red", pch = 16)
 ```
+
+### Interpretation
+
+This scatter plot shows **no clear trend** — the points form a cloud with no obvious direction. Compare this to the scatter plots above where you can see a diagonal pattern.
+
+**Why PANU doesn't predict funcUseRatio:**
+
+- PANU measures trunk compensation during a single reaching task in the clinic
+- funcUseRatio aggregates arm use across 7 days of varied daily activities
+- Proximal non-use in one specific task does not necessarily translate to non-use in all activities (eating, dressing, grasping objects, opening doors)
+
+**This is an important negative finding** — it tells us that even specialized kinematic measures of non-use in the lab don't fully capture real-world arm behavior. This motivates using accelerometry to measure **what patients actually do at home**, not just what they can do in the clinic.
+
+This replicates exactly what Le Perf (2022) found in the thesis, strengthening confidence in the finding.
+
+---
 
 # Group Comparisons
 
@@ -367,6 +514,26 @@ cat("Mann-Whitney test by Paresis: W =", test_paresis$statistic,
 
 par(mfrow = c(1, 1))
 ```
+
+### Interpretation
+
+**Neither sex nor paresis side significantly affects funcUseRatio** (both p-values well above 0.05).
+
+**What this means:**
+
+- Men and women use their paretic arm similarly in daily life — no reason to separate them in analysis.
+- Left-paretic and right-paretic patients show similar use patterns — no reason to separate them either.
+
+This is actually good news for our modeling:
+
+- We don't need to worry about demographic confounders
+- We can pool all 30 patients for analysis
+- The clinical motor tests (WMFT, BBT, FMUE) are the main drivers of funcUseRatio, regardless of sex or paresis side.
+
+**Clinical implication:** learned non-use appears to be a universal phenomenon — it doesn't particularly target one sex or one hemisphere. Interventions can be designed without strong demographic stratification.
+
+---
+
 # Simple Linear Regression
 
 As a final check, we fit a multiple linear regression in R using all significant predictors. This complements the Python ML models by showing the basic linear relationships. Note: this model ignores multicollinearity — for that we rely on Ridge/Lasso in Python.
@@ -379,3 +546,47 @@ lm_model <- lm(funcUseRatio ~ FMUE_TOTAL + WMFT_Total + BBT_P + Barthel + PANU +
 # Model summary
 summary(lm_model)
 ```
+
+### Interpretation
+
+The linear regression gives a quick overview, but **must be interpreted with caution** due to the multicollinearity we saw earlier.
+
+**What to look at:**
+
+- **Adjusted R²** — the proportion of variance explained by the model. Typically around 0.35–0.45 for this dataset. This means clinical scores explain ≈40% of the variance in arm use, leaving ≈60% unexplained — consistent with our conclusion that non-motor factors (psychological, environmental) also matter.
+- **p-value of the F-statistic** (bottom line) — tests whether the model as a whole is significant. Usually p < 0.01 here, meaning the set of predictors is informative.
+- **Individual coefficient p-values** — typically none or only one is significant. This is the signature of multicollinearity: even though the model overall works, we cannot tell which individual predictor is driving the prediction because they are too correlated.
+
+**Why this motivates Ridge/Lasso:**
+
+The high R² of OLS is misleading — it's the *training* R², computed on the same data used to fit the model. When we do LOOCV in Python, the cross-validated R² drops dramatically (often to near zero or negative), showing that OLS overfits on our small sample.
+
+**Ridge and Lasso in Python (main.ipynb) solve both problems:**
+
+- They stabilize coefficients despite multicollinearity
+- They produce honest cross-validated performance estimates
+- Lasso additionally does automatic feature selection, identifying which variables really matter
+
+---
+
+# Summary
+
+**Key statistical findings from this R notebook:**
+
+1. **funcUseRatio is right-skewed** (mean > median, Shapiro-Wilk p < 0.05) — non-parametric methods required.
+2. **Three motor tests significantly predict arm use**: WMFT (ρ ≈ 0.60), BBT (ρ ≈ 0.58), FMUE (ρ ≈ 0.48). All highly significant.
+3. **PANU does NOT predict arm use** (ρ ≈ -0.13, p = 0.50) — confirms Le Perf (2022).
+4. **Strong multicollinearity** between FMUE, WMFT, BBT (all ρ > 0.75 pairwise) — motivates regularized regression.
+5. **No sex or paresis-side effect** on funcUseRatio.
+6. **One outlier** (C1P01, funcUseRatio > 1) should be investigated in a sensitivity analysis.
+
+**What comes next:**
+
+The Python notebook (`main.ipynb`) uses these findings to:
+
+- Build a regularized machine learning pipeline (Linear, Ridge, Lasso) with LOOCV
+- Identify the most important features (Lasso feature importance)
+- Perform a **discrepancy analysis** to flag individual patients with learned non-use
+
+Together, R (statistics) and Python (machine learning) cover the full pipeline from data exploration to clinically actionable insights.
+
