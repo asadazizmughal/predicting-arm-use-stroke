@@ -22,7 +22,6 @@ This project investigates two questions:
 
 The main deliverable is **`nadeem.asad.html`** — a self-contained HTML report (≤ 3000 words, numbered sections, figures, tables, and a clickable TOC).
 
-> **To re-generate the report:** open `nadeem.asad.Rmd` in RStudio and click *Knit*.
 
 ## 3. Repository Structure
 
@@ -32,7 +31,6 @@ predicting-arm-use-stroke/
 ├── readme.md                  ← this file
 ├── LICENSE                    ← MIT License
 ├── nadeem.asad.html           ← final report (deliverable)
-├── nadeem.asad.Rmd            ← source of the report
 │
 ├── main.ipynb                 ← Python entry point: full ML pipeline
 ├── main.Rmd                   ← R entry point: statistical validation
@@ -89,7 +87,6 @@ The analysis runs in two steps:
 
 1. **Python first** — `main.ipynb` loads the raw data, builds the target variable, merges everything into `data/merged_dataset.csv`, runs the ML pipeline, and saves results to `results/`.
 2. **R second** — `main.Rmd` loads `data/merged_dataset.csv` and performs statistical validation.
-3. **Report last** — knit `nadeem.asad.Rmd` to produce the final HTML report.
 
 ```bash
 # Step 1 — Python
@@ -98,8 +95,6 @@ jupyter notebook main.ipynb
 # Step 2 — R (open in RStudio)
 #   Open main.Rproj, then open main.Rmd and click Knit
 
-# Step 3 — Report
-#   Open nadeem.asad.Rmd and click Knit
 ```
 
 ## 5. Methodology Summary
